@@ -28,3 +28,24 @@ export NVM_DIR="$HOME/.nvm"
    ②：使用 nvm list  或  nvm ls  可查看当前安装的node版本
    ③：使用 nvm use node版本 可以切换当前使用的node
    ④：使用 nvm alias default node版本  可以指定默认打开终端时的node版本
+
+**问题**
+
+每开一次终端，要 source ~/.bash_profile 环境变量才生效。
+
+**原因**
+
+>MacOS Catalina(10.15)，macOS的默认终端从bash变成了zsh。
+Mac10.15以下版本,默认shell环境是bash，系统环境变量的配置文件是 /etc/profile 文件。
+Mac10.15以上版本,默认shell环境是zsh，系统环境变量的配置文件是 /etc/zshrc 文件。
+
+**解决方法**
+
+编辑个人主目录下的.zshrc 这个文件
+
+~~~
+vim ~/.zshrc
+~~~
+在最后一行少添加一句：source ~/.bash_profile
+
+这样每次打开新窗口或标签页就自动执行了source ~/.bash_profile，环境变量就有了
