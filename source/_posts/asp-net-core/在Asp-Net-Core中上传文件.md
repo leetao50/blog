@@ -5,14 +5,6 @@ tags:
 ---
 ASP.NET Core 支持使用缓冲模型绑定（针对较小文件）和无缓冲流式传输（针对较大文件）上传一个或多个文件。
 
-# 存储方案
-
-## 数据库
-
-## 文件系统或网络共享
-
-## 云数据存储服务
-
 # 小型和大型文件
 小型和大型文件的定义取决于可用的计算资源。 应用应对存储方法进行基准测试，以确保它可以处理预期的大小。 基准内存、CPU、磁盘和数据库性能。
 
@@ -175,3 +167,154 @@ public async Task<IActionResult> OnPostUploadAsync()
 ~~~
 
 # 通过流式传输上传大型文件
+~~~C#
+public async Task<IActionResult> UploadDatabase()
+{
+    if (!MultipartRequestHelper.IsMultipartContentType(Request.ContentType))
+    {
+        ModelState.AddModelError("File", 
+            $"The request couldn't be processed (Error 1).");
+        // Log error
+
+        return BadRequest(ModelState);
+    }
+
+    // Accumulate the form data key-value pairs in the request (formAccumulator).
+    var formAccumulator = new KeyValueAccumulator();
+    var trustedFileNameForDisplay = string.Empty;
+    var untrustedFileNameForStorage = string.Empty;
+    var streamedFileContent = Array.Empty<byte>();
+
+    var boundary = MultipartRequestHelper.GetBoundary(
+        MediaTypeHeaderValue.Parse(Request.ContentType),
+        _defaultFormOptions.MultipartBoundaryLengthLimit);
+    var reader = new MultipartReader(boundary, HttpContext.Request.Body);
+
+    var section = await reader.ReadNextSectionAsync();
+
+    while (section != null)
+    {
+        var hasContentDispositionHeader = 
+            ContentDispositionHeaderValue.TryParse(
+                section.ContentDisposition, out var contentDisposition);
+
+        if (hasContentDispositionHeader)
+        {
+            if (MultipartRequestHelper
+                .HasFileContentDisposition(contentDisposition))
+            {
+                untrustedFileNameForStorage = contentDisposition.FileName.Value;
+                // Don't trust the file name sent by the client. To display
+                // the file name, HTML-encode the value.
+                trustedFileNameForDisplay = WebUtility.HtmlEncode(
+                        contentDisposition.FileName.Value);
+
+                streamedFileContent = 
+                    await FileHelpers.ProcessStreamedFile(section, contentDisposition, 
+                        ModelState, _permittedExtensions, _fileSizeLimit);
+
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(ModelState);
+                }
+            }
+            else if (MultipartRequestHelper
+                .HasFormDataContentDisposition(contentDisposition))
+            {
+                // Don't limit the key name length because the 
+                // multipart headers length limit is already in effect.
+                var key = HeaderUtilities
+                    .RemoveQuotes(contentDisposition.Name).Value;
+                var encoding = GetEncoding(section);
+
+                if (encoding == null)
+                {
+                    ModelState.AddModelError("File", 
+                        $"The request couldn't be processed (Error 2).");
+                    // Log error
+
+                    return BadRequest(ModelState);
+                }
+
+                using (var streamReader = new StreamReader(
+                    section.Body,
+                    encoding,
+                    detectEncodingFromByteOrderMarks: true,
+                    bufferSize: 1024,
+                    leaveOpen: true))
+                {
+                    // The value length limit is enforced by 
+                    // MultipartBodyLengthLimit
+                    var value = await streamReader.ReadToEndAsync();
+
+                    if (string.Equals(value, "undefined", 
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        value = string.Empty;
+                    }
+
+                    formAccumulator.Append(key, value);
+
+                    if (formAccumulator.ValueCount > 
+                        _defaultFormOptions.ValueCountLimit)
+                    {
+                        // Form key count limit of 
+                        // _defaultFormOptions.ValueCountLimit 
+                        // is exceeded.
+                        ModelState.AddModelError("File", 
+                            $"The request couldn't be processed (Error 3).");
+                        // Log error
+
+                        return BadRequest(ModelState);
+                    }
+                }
+            }
+        }
+
+        // Drain any remaining section body that hasn't been consumed and
+        // read the headers for the next section.
+        section = await reader.ReadNextSectionAsync();
+    }
+
+    // Bind form data to the model
+    var formData = new FormData();
+    var formValueProvider = new FormValueProvider(
+        BindingSource.Form,
+        new FormCollection(formAccumulator.GetResults()),
+        CultureInfo.CurrentCulture);
+    var bindingSuccessful = await TryUpdateModelAsync(formData, prefix: "",
+        valueProvider: formValueProvider);
+
+    if (!bindingSuccessful)
+    {
+        ModelState.AddModelError("File", 
+            "The request couldn't be processed (Error 5).");
+        // Log error
+
+        return BadRequest(ModelState);
+    }
+
+    // **WARNING!**
+    // In the following example, the file is saved without
+    // scanning the file's contents. In most production
+    // scenarios, an anti-virus/anti-malware scanner API
+    // is used on the file before making the file available
+    // for download or for use by other systems. 
+    // For more information, see the topic that accompanies 
+    // this sample app.
+
+    var file = new AppFile()
+    {
+        Content = streamedFileContent,
+        UntrustedName = untrustedFileNameForStorage,
+        Note = formData.Note,
+        Size = streamedFileContent.Length, 
+        UploadDT = DateTime.UtcNow
+    };
+
+    _context.File.Add(file);
+    await _context.SaveChangesAsync();
+
+    return Created(nameof(StreamingController), null);
+}
+~~~
