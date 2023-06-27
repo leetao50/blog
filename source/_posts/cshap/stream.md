@@ -97,7 +97,7 @@ System.IO 命名空间还提供用于在流中读取和写入已编码字符的�
 >
 > 返回值：读入缓冲区中的总字节数，总字节数可能小于请求的字节数，如果已到达流结尾，则为零 (0)；
 
-+ Stream.Seek(Int64 offset , SeekOrigin origin)
++ Seek(long offset , SeekOrigin origin)
 当在派生类中重写时，设置当前流中的位置。
 > + offset: 相对于 origin 参数的字节偏移量。
 > + origin: SeekOrigin 类型的值，指示用于获取新位置的参考点。
@@ -106,19 +106,19 @@ System.IO 命名空间还提供用于在流中读取和写入已编码字符的�
 > 
 > 如果 offset 为正，则要求新位置位于 origin 指定的位置之后，其间隔相差 offset 指定的字节数.
 > 
-> Stream. Seek(-3,Origin.End);  表示在流末端往前数第3个位置
+>  + Stream. Seek(-3,Origin.End);  表示在流末端往前数第3个位置
 > 
-> Stream. Seek(0,Origin.Begin); 表示在流的开头位置
+>  + Stream. Seek(0,Origin.Begin); 表示在流的开头位置
 > 
-> Stream. Seek(3,Orig`in.Current); 表示在流的当前位置往后数第三个位置
+>  + Stream. Seek(3,Orig`in.Current); 表示在流的当前位置往后数第三个位置
 >
 
 + void Write (byte[] buffer, int offset, int count); 向当前流中写入字节序列，并将此流中的当前位置提升写入的字节数。
 > + buffer: 字节数组。 此方法将 count 个字节从 buffer 复制到当前流
 >
-> offset: buffer 中的字节偏移量，从此处开始将字节复制到当前流;
+>  + offset: buffer 中的字节偏移量，从此处开始将字节复制到当前流;
 >
-> count: 要写入当前流的字节数
+>  + count: 要写入当前流的字节数
 >
 > 如果写入操作成功，则流中的位置将按写入的字节数前进。 如果发生异常，则流中的位置保持不变。
 
