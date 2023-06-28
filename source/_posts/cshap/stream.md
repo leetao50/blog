@@ -122,7 +122,233 @@ System.IO 命名空间还提供用于在流中读取和写入已编码字符的�
 >
 > 如果写入操作成功，则流中的位置将按写入的字节数前进。 如果发生异常，则流中的位置保持不变。
 
+# TextReader
+
+是一个抽象类。 因此，不要在代码中实例化它。 派生类（StreamReader 和 StringReader）必须至少实现 Peek() 和 Read() 方法，才能成为TextReader有用的实例。
+
+此类型实现 IDisposable 接口。 使用完派生自此类型的任何类型后，应直接或间接释放它。 若要直接释放类型，请在 try/catch 块中调用其 Dispose 方法。 若要间接释放类型，请使用 using（在 C# 中）等语言构造
+
+## 方法
+
++ void Close ()：关闭 TextReader 并释放与该 TextReader 关联的所有系统资源；
++ void Dispose ()：释放由 TextReader 对象使用的所有资源；假如TextReader中持有stream或其他对象，当TextReader执行了Dispose方法时，stream对象也被回收了；
++ int Peek ()：读取下一个字符，而不更改读取器状态或字符源。 返回下一个可用字符，而实际上并不从读取器中读取此字符。
+> 返回值：一个表示下一个要读取的字符的整数；如果没有更多可读取的字符或该读取器不支持查找，则为 -1。
+> 该方法 Peek 返回整数值，以确定文件末尾还是发生了另一个错误。 这样，用户就可以先检查返回的值是否为 -1，然后再将其强制转换为 Char 类型。
+
++ int Read ()：读取文本读取器中的下一个字符并使该字符的位置前移一个字符。
+
+> 返回值：文本读取器中的下一个字符，或为 -1（如果没有更多可用字符）。 默认实现将返回 -1。
+>
+> read()方法使指针指向下个字符，但是peek()还是指向原来那个字符
+>
+
+~~~C#
+
+string text = "abc\nabc";
 
 
+using (TextReader reader = new StringReader(text))
+{
+    while (reader.Peek() != -1)
+    {
+        Console.WriteLine("Peek = {0}", (char)reader.Peek());
+        Console.WriteLine("Read = {0}", (char)reader.Read());
+    }
+    reader.Close();
+}
+
+using (TextReader reader = new StringReader(text))
+{
+    char[] charBuffer = new char[3];
+    int data = reader.ReadBlock(charBuffer, 0, 3);
+    for (int i = 0; i < charBuffer.Length; i++)
+    {
+        Console.WriteLine("通过readBlock读出的数据：{0}", charBuffer[i]);
+    }
+    reader.Close();
+}
+
+using (TextReader reader = new StringReader(text))
+{
+    string lineData = reader.ReadLine();
+    Console.WriteLine("第一行的数据为:{0}", lineData);
+    reader.Close();
+}
+
+using (TextReader reader = new StringReader(text))
+{
+    string allData = reader.ReadToEnd();
+    Console.WriteLine("全部的数据为:{0}", allData);
+    reader.Close();
+}
+
+Console.ReadLine();
+~~~
+
+# StreamReader
+实现一个 TextReader，使其以一种特定的编码从字节流中读取字符。
+
+StreamReader 设计用于特定编码中的***字符-Char**输入，而 Stream 类设计用于**字节-byte**输入和输出。 用于 StreamReader 从标准文本文件读取信息行。
+
+StreamReader 除非另行指定，否则默认为 UTF-8 编码，而不是默认为当前系统的 ANSI 代码页。 UTF-8 正确处理 Unicode 字符，并在操作系统的本地化版本上提供一致的结果。
+
+ 如果使用CurrentEncoding属性获取当前字符编码 ，则值在执行第一个 Read 方法之后才可靠，因为编码自动检测在首次调用方法之前不会完成。
+
+ ## 构造函数
+
+ + StreamReader(Stream)	：为指定的流初始化 StreamReader 类的新实例。
+ + StreamReader(Stream, Encoding)：用指定的字符编码为指定的流初始化 StreamReader 类的一个新实例。
+ + StreamReader(String, Encoding)：用指定的字符编码，为指定的文件名初始化 StreamReader 类的一个新实例。
+>  这里的string对象不是简单的字符串而是具体文件的地址,然后根据用户选择编码去读取流中的数据
+
+## 属性
+
++ BaseStream：返回基础流。
+~~~C#
+FileStream fs = new FileStream ( "D:\\TextReader.txt", FileMode.Open , FileAccess.Read ) ; 
+StreamReader sr= new StreamReader ( fs ) ; 
+//本例中的BaseStream就是FileStream
+sr.BaseStream.Seek (0 , SeekOrigin.Begin ) ;
+~~~
++ CurrentEncoding：获取当前 StreamReader 对象正在使用的当前字符编码
++ EndOfStream：获取一个值，该值指示当前的流位置是否在流结尾，如果当前流位置位于流的末尾，则为 true；否则为 false。
 
 
+~~~c#
+
+//文件地址
+string txtFilePath = "D:\\TextReader.txt";
+//定义char数组
+char[] charBuffer2 = new char[3];
+
+//利用FileStream类将文件文本数据变成流然后放入StreamReader构造函数中
+using (FileStream stream = File.OpenRead(txtFilePath))
+{
+    using (StreamReader reader = new StreamReader(stream))
+    {
+        //StreamReader.Read()方法
+        DisplayResultStringByUsingRead(reader);
+    }
+}
+
+using (FileStream stream = File.OpenRead(txtFilePath))
+{
+    //使用Encoding.ASCII来尝试下
+    using (StreamReader reader = new StreamReader(stream, Encoding.ASCII, false))
+    {
+        //StreamReader.ReadBlock()方法
+        DisplayResultStringByUsingReadBlock(reader);
+    }
+}
+
+//尝试用文件定位直接得到StreamReader，顺便使用 Encoding.Default
+using (StreamReader reader = new StreamReader(txtFilePath, Encoding.Default, false, 123))
+{
+    //StreamReader.ReadLine()方法
+    DisplayResultStringByUsingReadLine(reader);
+}
+
+//也可以通过File.OpenText方法直接获取到StreamReader对象
+using (StreamReader reader = File.OpenText(txtFilePath))
+{
+    //StreamReader.ReadLine()方法
+    DisplayResultStringByUsingReadLine(reader);
+}
+
+Console.ReadLine();
+
+
+        /// <summary>
+        /// 使用StreamReader.Read()方法
+        /// </summary>
+        /// <param name="reader"></param>
+public static void DisplayResultStringByUsingRead(StreamReader reader)
+{
+    int readChar = 0;
+    string result = string.Empty;
+    while ((readChar = reader.Read()) != -1)
+    {
+        result += (char)readChar;
+    }
+    Console.WriteLine("使用StreamReader.Read()方法得到Text文件中的数据为 : {0}", result);
+}
+
+/// <summary>
+/// 使用StreamReader.ReadBlock()方法
+/// </summary>
+/// <param name="reader"></param>
+public static void DisplayResultStringByUsingReadBlock(StreamReader reader)
+{
+    char[] charBuffer = new char[10];
+    string result = string.Empty;
+    reader.ReadBlock(charBuffer, 0, 10);
+    for (int i = 0; i < charBuffer.Length; i++)
+    {
+        result += charBuffer[i];
+    }
+    Console.WriteLine("使用StreamReader.ReadBlock()方法得到Text文件中前10个数据为 : {0}", result);
+}
+
+
+/// <summary>
+/// 使用StreamReader.ReadLine()方法
+/// </summary>
+/// <param name="reader"></param>
+public static void DisplayResultStringByUsingReadLine(StreamReader reader)
+{
+    int i = 1;
+    string resultString = string.Empty;
+    while ((resultString = reader.ReadLine()) != null)
+    {
+        Console.WriteLine("使用StreamReader.Read()方法得到Text文件中第{1}行的数据为 : {0}", resultString, i);
+        i++;
+    }
+}
+~~~
+
+# TextWriter 
+
+TextWriter是抽象基类，子类 StreamWriter 和 StringWriter，分别将字符写入流和字符串。 派生类必须实现 Write(Char) 方法，才能创建一个有用的实例 TextWriter。
+
+## 构造函数
+
++ TextWriter()：初始化 TextWriter 类的新实例。
+
++ TextWriter(IFormatProvider)：使用指定的格式提供程序初始化 TextWriter 类的新实例。
+> 使用此构造函数创建的实例，在调用 Write 和 WriteLine 方法时使用FormatProvider属性值，设置的区域性特定格式。
+
+## 属性
+
++ Encoding：当在派生类中重写时，返回用来写输出的该字符编码。
+
++ FormatProvider：获取控制格式设置的对象。
+
++ NewLine：获取或设置由当前 TextWriter 使用的行结束符字符串。
+
+# StreamWriter
+
+StreamWriter 以一种特定的编码向流中写入字符。 除非另外指定，否则默认为使用UTF8Encoding实例 。 UTF8Encoding实例在构造时没有字节顺序标记 (BOM) ，因此其 GetPreamble 方法返回一个空字节数组。 此构造函数的默认 UTF-8 编码对无效字节引发异常。 此行为不同于属性中的编码对象提供的行为 Encoding.UTF8 。 若要指定一个 BOM 并确定无效字节是否引发了异常，请使用接受编码对象作为参数的构造函数。
+
+## 构造函数
+
++ StreamWriter(Stream)：使用 UTF-8 编码及默认的缓冲区大小，为指定的流初始化 StreamWriter 类的新实例。
+
++ StreamWriter(Stream, Encoding)：使用指定的编码及默认的缓冲区大小，为指定的流初始化 StreamWriter 类的新实例。
++ StreamWriter (string path, bool append)：用默认编码和缓冲区大小，为指定的文件初始化 StreamWriter 类的一个新实例。
+  >  若要追加数据到该文件中，append为 true；若要覆盖该文件，append为 false。 如果指定的文件不存在，该参数无效，且构造函数将创建一个新文件。
+
+## 属性
+
++ AutoFlush：获取或设置一个值，该值指示 StreamWriter 在每次调用 Write(Char) 之后是否都将其缓冲区刷新到基础流。
+
++ BaseStream：获取同后备存储连接的基础流。
+
++ Encoding：获取在其中写入输出的 Encoding。
+
++ FormatProvider：获取控制格式设置的对象。
+
++ NewLine：获取或设置由当前 TextWriter 使用的行结束符字符串。
+
+
+# FileStream
