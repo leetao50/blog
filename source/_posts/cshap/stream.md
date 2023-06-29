@@ -352,3 +352,223 @@ StreamWriter 以一种特定的编码向流中写入字符。 除非另外指定
 
 
 # FileStream
+
+使用FileStream类读取、写入、打开和关闭文件系统上的文件，并操作其他与文件相关的操作系统句柄，包括管道、标准输入和标准输出。 可以使用 Read、 Write、 CopyTo和 Flush 方法执行同步操作，或使用 ReadAsync、 WriteAsync、 CopyToAsync和 FlushAsync 方法执行异步操作。 使用异步方法执行资源密集型文件操作，而不会阻止主线程。 
+
+属性 IsAsync 检测文件句柄是否已异步打开。 使用具有 isAsync、 或 options 参数的构造函数创建FileStream类的实例时，useAsync可以指定此值。 当IsAsync属性为 true时，流利用重叠的 I/O 以异步方式执行文件操作。 
+
+当IsAsync属性为 false 并且你调用异步读取和写入操作时，UI 线程仍不会被阻止，但实际 I/O 操作是同步执行的。
+
+方法 Seek 支持对文件的随机访问。 Seek 允许将读/写位置移动到文件中的任何位置。
+
+当对象 FileStream 在其句柄上没有独占保留时，另一个线程可以同时访问文件句柄，并更改与文件句柄关联的操作系统文件指针的位置。 在这种情况下，对象中的 FileStream 缓存位置和缓冲区中的缓存数据可能会受到威胁。 对象 FileStream 定期对访问缓存缓冲区的方法执行检查，以确保操作系统的句柄位置与对象使用的 FileStream 缓存位置相同。
+
+如果在调用 Read 方法时检测到句柄位置的意外更改，.NET Framework放弃缓冲区的内容，并从文件中再次读取流。 这可能会影响性能，具体取决于文件的大小以及可能影响文件流位置的任何其他进程。
+
+如果在调用 Write 方法时检测到句柄位置的意外更改，则会丢弃缓冲区的内容并 IOException 引发异常。
+
+## 构造函数
+
++ FileStream(SafeFileHandle, FileAccess)：使用指定的读/写权限为指定的文件句柄初始化 FileStream 类的新实例。
+> SafeFileHandle
+当前 FileStream 对象将封装的文件的文件句柄。
+
+> FileAccess
+枚举值的按位组合，它用于设置 FileStream 对象的 CanRead 和 CanWrite 属性。
+
++ FileStream(String, FileMode, FileAccess, FileShare, Int32, FileOptions):使用指定的路径、创建模式、读/写和共享权限、其他 FileStreams 可以具有的对此文件的访问权限、缓冲区大小和附加文件选项初始化 FileStream 类的新实例。
+
+> String: 当前 FileStream 对象将封装的文件的相对路径或绝对路径。
+> 
+> FileMode: 用于确定文件的打开或创建方式的枚举值之一。
+> 
+> FileAccess: 枚举值的按位组合，这些枚举值确定 FileStream 对象访问文件的方式。 该常数还可以确定由 FileStream 对象的 CanRead 和 CanWrite 属性返回的值。 如果 path 指定磁盘文件，则 CanSeek 为 true。
+> 
+> FileShare: 枚举值的按位组合，这些枚举值确定进程共享文件的方式。
+>
+> Int32: 一个大于零的正 Int32 值，表示缓冲区大小。 默认缓冲区大小为 4096
+> FileOptions: 枚举值的按位组合，它用于指定其他文件选项
+
+### 参数说明
+
++ FileMode：指定操作系统打开文件的方式。
+> Append: 若存在文件，则打开该文件并查找到文件尾，或者创建一个新文件。 FileMode.Append 只能与 FileAccess.Write 一起使用。 试图查找文件尾之前的位置时会引发 IOException 异常，并且任何试图读取的操作都会失败并引发 NotSupportedException 异常。
+> 
+> Create: 指定操作系统应创建新文件。 如果此文件已存在，则会将其覆盖。 这需要 Write 权限。 
+> FileMode.Create 等效于这样的请求：如果文件不存在，则使用 CreateNew；否则使用 Truncate。 如果该文件已存在但为隐藏文件，则将引发 UnauthorizedAccessException异常。
+> 
+> CreateNew: 指定操作系统应创建新文件。 这需要 Write 权限。 如果文件已存在，则将引发 IOException异常。
+> 
+> Open: 指定操作系统应打开现有文件。 打开文件的能力取决于 FileAccess 枚举所指定的值。 如果文件不存在，引发一个 FileNotFoundException 异常。
+> 
+> OpenOrCreate: 指定操作系统应打开文件（如果文件存在）；否则，应创建新文件。 如果用 FileAccess.Read 打开文件，则需要 Read权限。 如果文件访问为 FileAccess.Write，则需要 Write权限。 如果用 FileAccess.ReadWrite 打开文件，则同时需要 Read 和 Write权限
+> 
+> Truncate: 指定操作系统应打开现有文件。 该文件被打开时，将被截断为零字节大小。 这需要 Write 权限。 尝试从使用 FileMode.Truncate 打开的文件中进行读取将导致 ArgumentException 异常。
+
++ FileAccess: 定义文件的读取、写入或读/写访问权限的常量。
+
+> Read: 对文件的读访问。 可从文件中读取数据。 与 Write 组合以进行读写访问。
+> 
+> ReadWrite: 对文件的读写访问权限。 可从文件读取数据和将数据写入文件。
+> 
+> Write: 文件的写访问。 可将数据写入文件。 与 Read 组合以进行读写访问。
+>
+
++ FileShare: 包含用于控制其他 FileStream 对象对同一文件可以具有的访问类型的常数。
+
+> Delete: 允许随后删除文件。
+> 
+> Inheritable: 使文件句柄可由子进程继承。 Win32 不直接支持此功能。
+> 
+> None: 谢绝共享当前文件。 文件关闭前，打开该文件的任何请求（由此进程或另一进程发出的请求）都将失败。
+> 
+> Read: 允许随后打开文件读取。 如果未指定此标志，则文件关闭前，任何打开该文件以进行读取的请求（由此进程或另一进程发出的请求）都将失败。 但是，即使指定了此标志，仍可能需要附加权限才能够访问该文件。
+> 
+> ReadWrite: 允许随后打开文件读取或写入。 如果未指定此标志，则文件关闭前，任何打开该文件以进行读取或写入的请求（由此进程或另一进程发出）都将失败。 但是，即使指定了此标志，仍可能需要附加权限才能够访问该文件。
+> 
+> Write: 允许随后打开文件写入。 如果未指定此标志，则文件关闭前，任何打开该文件以进行写入的请求（由此进程或另一进过程发出的请求）都将失败。 但是，即使指定了此标志，仍可能需要附加权限才能够访问该文件。
+
++ FileOptions
+
+> Asynchronous: 指示文件可用于异步读取和写入
+> 
+> DeleteOnClose: 指示当不再使用某个文件时，自动删除该文件。
+> 
+> Encrypted: 指示文件是加密的，只能通过用于加密的同一用户帐户来解密。
+> 
+> None: 指示在生成 FileStream 对象时，不应使用其他选项。
+> 
+> RandomAccess: 指示随机访问文件。 系统可将此选项用作优化文件缓存的提示。
+> 
+> SequentialScan: 指示按从头到尾的顺序访问文件。 系统可将此选项用作优化文件缓存的提示。 如果应用程序移动用于随机访问的文件指针，可能不发生优化缓存，但仍然保证操作的正确性。 如果指定此标志，可提升某些案例中的性能。
+> 
+> WriteThrough: 指示系统应通过任何中间缓存、直接写入磁盘。
+
+> 指定 FileOptions.SequentialScan 标志可以提高使用顺序访问读取大型文件的应用程序的性能。 对于主要按顺序读取大型文件，但偶尔跳过小范围字节的应用程序，性能提升可能更为明显。
+
+
+## 属性
+
++ IsAsync：获取一个值，它指示 FileStream 是异步打开还是同步打开的。
+
++ Length：获取流的长度（以字节为单位）。
+
++ Name：获取 FileStream 中已打开的文件的绝对路径。
+
++ Position：获取或设置此流的当前位置。
+
++ SafeFileHandle：获取 SafeFileHandle 对象，它代表当前 FileStream 对象所封装的文件的操作系统文件句柄。
+
+## 方法
+
+属于FileStream独有的方法
+
++ FileSecurity GetAccessControl(FileStream)： 返回文件的安全信息。
+> FileStream: 一个要从中获取安全信息的现有文件
+>
++ void SetAccessControl(FileSecurity fileSecurity): 和GetAccessControl很相似，ACL技术会在以后单独介绍
+
++ Lock (long position, long length);防止其他进程读取或写入 FileStream。
+
+>  这个Lock方法和线程中的Look关键字很不一样，它能够锁住文件中的某一部分，非常的强悍！用了这个方法我们能够精确锁定住我们需要锁住的文件的部分内容
+
++ void Unlock (long position,long length):正好和lock方法相反，对于文件部分的解锁
+
+# MemoryStream
+
+创建一个流，其后备存储为内存。
+
+使用无符号字节数组创建的内存流提供不可调整大小的数据流。 使用字节数组时，既不能追加流，也不能收缩流，不过，根据传递到构造函数的参数，可以修改现有内容。 空内存流可调整大小，可以写入和读取。
+
+由于MemoryStream是通过无符号字节数组组成的，可以说MemoryStream的性能可以算比较出色，所以它担当起了一些其他流进行数据交换时的中间工作，同时可降低应用程序中对临时缓冲区和临时文件的需要.
+
+## 构造函数
+
++ MemoryStream()：使用初始化为零的可扩展容量初始化 MemoryStream 类的新实例。
+
+> 使用初始化为零的可扩展容量初始化 MemoryStream 类的新实例。
+>
+> CanSeek属性CanRead和CanWrite属性都设置为 true。
+> 
+>使用 SetLength 该方法将长度设置为大于当前流的容量的值时，当前流的容量会自动增加。
+> 
+> 此构造函数公开返回的基础流 GetBuffer 。
+
++ MemoryStream(Byte[])：基于指定的字节数组初始化 MemoryStream 类的无法调整大小的新实例。
+
+> 基于指定的字节数组初始化 MemoryStream 类的无法调整大小的新实例。
+> 
+> CanSeek属性CanRead和CanWrite属性都设置为 true。 Capacity 设置为指定字节数组的长度。 可将新流写入，但不可调整大小。
+> 
+> 流的长度不能设置为大于指定字节数组的初始长度的值;但是， (可以看到 SetLength) 截断流。
+> 
+> 此构造函数不公开基础流。 GetBuffer throws UnauthorizedAccessException.
+
++ MemoryStream(Int32)：使用按指定要求初始化的可扩展容量初始化 MemoryStream 类的新实例。
+
+>使用按指定要求初始化的可扩展容量初始化 MemoryStream 类的新实例。
+>
+>CanSeek属性CanRead和CanWrite属性都设置为 true。
+>
+>使用 SetLength 此方法将长度设置为大于当前流的容量的值时，容量会自动增加。
+>
+>此构造函数公开返回的基础流 GetBuffer
+
++ MemoryStream(Byte[], Int32, Int32, Boolean, Boolean)：在 MemoryStream 属性和调用 CanWrite 的能力按指定设置的状态下，基于字节数组的指定区域初始化 GetBuffer() 类的新实例。
+
+> 和CanRead、CanSeek属性都设置为true。 将 Capacity 设置为 count。
+> 
+> 可以将新流实例写入其中，但 Capacity 基础字节数组无法更改。 流的长度不能设置为大于指定字节数组的初始长度的值;
+
+## 方法
+
++ virtual byte[] GetBuffer()： 返回从中创建此流的无符号字节的数组
+
+> 请注意，缓冲区包含可能未使用的已分配字节。 例如，如果将字符串“test”写入 MemoryStream 对象，则返回 GetBuffer 的缓冲区长度为 256，而不是 4，未使用 252 个字节。 若要仅获取缓冲区中的数据，请使用 ToArray 该方法;但是， ToArray 会在内存中创建数据的副本。
+>
+> 这个方法使用时需要小心，因为这个方法返回无符号字节数组，也就是说，即使我只输入几个字符例如”HellowWorld”我们只希望返回11个数据就行，可是这个方法会把整个缓冲区的数据，包括那些已经分配但是实际上没有用到的字节数据都返回出来;
+>
++ virtual void WriteTo(Stream stream): 将此内存流的整个内容写入到另一个流中。
+
+> memoryStream常用起中间流的作用，所以在处理完后将内存流写入其他流中;
+>
+
+# BufferedStream
+
+将缓冲层添加到另一个流上的读取和写入操作。
+BufferedStream能够实现流的缓存，换句话说也就是在内存中能够缓存一定的数据而不是
+
+时时给系统带来负担，同时BufferedStream可以对缓存中的数据进行写入或是读取，所以对流的性能带来一定的提升，但是无法同时进行读取或写入工作，如果不使用缓冲区也行，BufferedStream能够保证不用缓冲区时不会降低因缓冲区带来的读取或写入性能的下降。
+
+为什么MemoryStream 同样也是在内存中对流进行操作，和BufferedStream有什么区别呢？BufferedStream并不是将所有内容都存放到内存中，而MemoryStream则是。BufferedStream必须跟其他流如FileStream结合使用，而MemoryStream则不用，聪明的你肯定能够想到，BufferedStream必然类似于一个流的包装类，对流进行”缓存功能的扩展包装”，所以BufferedStream的优势不仅体现在其原有的缓存功能上，更体现在如何帮助原有类实现其功能的扩展层面上。
+
+# NetworkStream
+
+如果服务器和客户端之间基于TCP连接的，他们之间能够依靠一个稳定的字节流进行相互传输信息，这也是
+
+NetworkStream的最关键的作用，有了这个神奇的协议，NetWorkStream便能向其他流一样在网络中（进行点对点的传输）
+
+> + NetworkStream只能用在具有Tcp/IP协议之中，如果用在UDP中编译不报错，会报异常
+> 
+> + NetworkStream 是面向连接的
+> 
+> + 在网络中利用流的形式传递信息
+> 
+> + 必须借助Socket (也称之为流式socket)，或使用一些返回的返回值，例如TcpClient类的GetStream方法
+> 
+> + 用法和普通流方法几乎一模一样，但具有特殊性
+
+可以在类实例 NetworkStream 上同时执行读取和写入操作，而无需同步。 只要写入操作有一个唯一线程，读取操作有一个唯一线程，读取和写入线程之间就不会有交叉干扰，也不需要同步。
+
+
+
+
+
+
+
+
+
+
+
+
+
