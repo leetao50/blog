@@ -1,7 +1,7 @@
 ---
 title: 从Angular中的字符串、数组和对象创建可观察对象
 date: 2023-04-25 17:03:43
-tags:
+tags:rxjs
 ---
 
 # Observable 的创建功能
@@ -152,7 +152,7 @@ fromEvent<T>(target: FromEventTarget<T>,
              resultSelector: (...args: any[]) => T): Observable<T>
 ~~~
 
-FromEventTarget：是fromvevent的第一个参数。它可以是DOM EventTarget、Node.js EventEmitter、类似JQuery的事件目标、NodeList或HTMLCollection。目标必须有一个方法来注册/注销事件处理程序。（如果是DOM事件目标，则为addEventListener/removeEventListener）
+FromEventsTarget：是fromvevent的第一个参数。它可以是DOM EventTarget、Node.js EventEmitter、类似JQuery的事件目标、NodeList或HTMLCollection。目标必须有一个方法来注册/注销事件处理程序。（如果是DOM事件目标，则为addEventListener/removeEventListener）
 
 eventName：是第二个参数，这是我们想要侦听的事件类型。
 
