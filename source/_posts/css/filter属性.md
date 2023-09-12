@@ -59,3 +59,42 @@ filter: unset;
 
 滤镜在日常开发中是很常见的，比如使用drop-shadow给不规则形状添加阴影；使用blur来实现背景模糊，以及毛玻璃效果等。
 
+```htm
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Document</title>
+    <style>
+      .box {
+        background-color: #fff;
+        position: relative;
+        width: 125px;
+        height: 204px;
+        margin: 50px;
+        filter: drop-shadow(0px 2px 8px rgba(198, 198, 198, 0.5));
+        /* box-shadow: 0px 2px 8px 0px rgba(198, 198, 198, 0.5); */
+      }
+
+      .box::after {
+        content: "";
+        position: absolute;
+        top: -40px;
+        left: calc(50% - 20px);
+        width: 0;
+        height: 0;
+        border: 20px solid transparent;
+        border-bottom-color: #fff;
+      }
+      
+    </style>
+  </head>
+  <body>
+    <div class="box"></div>
+  </body>
+</html>
+
+```
+
+![图 0](../1ae2217fcd1175f1942cb420fd0c53241ac32697b965b5d432844c6138f092a1.png)  
