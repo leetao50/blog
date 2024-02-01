@@ -64,6 +64,7 @@ tags:
 2. 定位参照对象是最近一级拥有定位的祖先元素（相对于static定位以外的第一个父元素进行定位），可以通过left、right、top、bottom来进行位置调整。
 3. 如果一直往上层元素找不到有定位的元素，那么最终的参照对象为浏览器窗口。
 4. 宽高由内容撑开。
+5. 包含块就是由它的最近的 position 的值不是 static 的祖先元素的**内边距区**的边缘组成。
 
 # fixed
 1. 元素脱离标准流（脱标）
@@ -202,4 +203,6 @@ div2的父div设置为absolute，下面的div3,div4会上移，div2也设置为a
 + 祖先类的margin会让子类的absoulte跟着偏移，而padding却不会让子类的absoulte发生偏移。总结一下，就是absoulte是根据祖先类的border进行的定位。
   
 + 无论父级盒子是正常显示还是以border-box显示，在没有规定left和top的属性值时，都呈现在父级盒子的内容区（不包含padding）左上角若规定了left：0；top：0；则统一相对父级盒子的左上角显示（包含padding）
+  
++ 当只给元素定义了position：absolute时，如果top, bottom, left, right都没有指定时，则left，top值与原文档流位置一致（当然了它是不占位的）。所以只设置了top属性而未设置left属性就造成了它在水平方向上仍然保持原有位置，而这个位置绝对不是left：0。实际上不论是何种定位，规则都如上所述。
 

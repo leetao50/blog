@@ -3,7 +3,9 @@ title: HostBinding & HostListener
 date: 2023-04-03 17:10:50
 tags:
 ---
-HostBinding和HostListener是Angular中的装饰器。HostListener侦听宿主控件事件，而HostBinding允许我们绑定宿主控件的属性。宿主控件是我们将要附加组件或指令到它上面的目标控件。此功能允许我们在用户对宿主控件执行某些操作或修改样式时采取一些措施；
+HostBinding和HostListener是Angular中的装饰器。HostListener侦听宿主控件事件，而HostBinding允许我们绑定宿主控件的属性。
+
+宿主控件是我们将要附加组件或指令到它上面的目标控件。此功能允许我们在用户对宿主控件执行某些操作或修改样式时采取一些措施；
 
 # 宿主控件
 

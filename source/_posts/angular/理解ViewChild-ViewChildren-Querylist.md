@@ -3,9 +3,7 @@ title: 理解ViewChild, ViewChildren & Querylist
 date: 2023-04-04 14:03:01
 tags:
 ---
-ViewChild或ViewChildren装饰器用于查询和获取组件中DOM元素的引用。ViewChild返回第一个匹配的元素，ViewChildren以QueryList形式返回所有匹配的元素。我们可以通过这些引用在组件中操作dom元素属性。
-
-ViewChild或ViewChildren的第一个参数是查询选择器，通过ViewChild或ViewChildren来查询DOM元素，我们可以提供字符串或类型作为查询选择器。参数static确定是在更改检测之前还是之后执行查询。read选项允许我们查询不同的令牌，而不是默认令牌，并且在元素与多个类型关联时很有用。
+ViewChild或ViewChildren装饰器用于查询和获取组件中DOM元素的引用。ViewChild返回第一个匹配的元素，ViewChildren以QueryList形式返回所有匹配的元素。
 
 # ViewChild
 ViewChild查询从DOM返回第一个匹配元素，并更新它在组件中绑定的变量。
@@ -17,17 +15,23 @@ ViewChild(selector: string | Function | Type<any>, opts: { read?: any; static: b
 ~~~
 我们在组件属性上应用viewChild装饰器。它需要提供两个参数，selector和opts。
 
-+ selector：可以是字符串、类型或返回字符串或类型的函数。变更检测查找与选择器匹配的第一个元素，并使用对该元素的引用更新组件属性。如果DOM发生更改，并且有一个新元素与选择器匹配，则变更检测会更新组件属性。
++ selector(查询选择器)：可以是字符串、类型或返回字符串或类型的函数。变更检测查找与选择器匹配的第一个元素，并使用对该元素的引用更新组件属性。如果DOM发生更改，并且有一个新元素与选择器匹配，则变更检测会更新组件属性。
 
 + opts：有两个选项。
 
-    + static：确定何时解析查询。设为True时，当视图首次初始化（在第一次更改检测之前）。设为False时，在每次检测到更改后执行。
+    + static：选项确定ViewChild查询解析的时间。
+      + static:true 将在每次变更改检测之前解析ViewChild(对象静态生成时)。
+      + static:false 将在每次变更改检测之后解析ViewChild(对象动态渲染时)。
+  
     + read：使用它从查询的元素中读取不同的令牌。
-# 例子
 
-## 在组件和指令中注入引用
+## 各类selector例子
 
-ViewChild的一个用例是在父组件中获取子组件的引用并操作其属性。
+### 通过class(组件和指令)
+
+这个class也是有条件的，必须是@Component或者@Directive修饰的clas。
+
+通过@ViewChild在父组件中获取子组件的引用并操作其属性。
 
 ~~~ts
 import { Component } from '@angular/core';
@@ -35,12 +39,10 @@ import { Component } from '@angular/core';
 @Component({
   selector: 'child-component',
   template: `<h2>Child Component</h2>
-            current count is {{ count }}
-    `
+            current count is {{ count }}`
 })
 export class ChildComponent {
   count = 0;
- 
   increment() {
     this.count++;
   }
@@ -50,17 +52,16 @@ export class ChildComponent {
 }
 ~~~
 
-我们可以在父组件中使用 ViewChild 引用子组件。
+我们可以在父组件中使用@ViewChild引用子组件。
 
 ~~~ts
 @ViewChild(ChildComponent, {static:true}) child: ChildComponent;
 ~~~
-在上面的代码中，ViewChild在父组件视图(Template)中查找第一个出现的ChildComponent组件，并更新父组件中的child变量。现在我们可以从父组件调用ChildComponent组件中的Increment和Decrement方法。
+在上面的代码中，@ViewChild在父组件的视图中，查找第一个出现的ChildComponent组件，并更新父组件中的child变量。现在我们可以从父组件调用子组件(ChildComponent)中的Increment和Decrement方法。
 
 ~~~ts
 import { Component, ViewChild } from '@angular/core';
 import { ChildComponent } from './child.component';
- 
 @Component({
   selector: 'app-root',
   template: `
@@ -74,7 +75,6 @@ import { ChildComponent } from './child.component';
 })
 export class AppComponent {
   title = 'Parent calls an @ViewChild()';
-  
   @ViewChild(ChildComponent, {static:true}) child: ChildComponent;
  
   increment() {
@@ -88,24 +88,105 @@ export class AppComponent {
 }
 ~~~
 
-## 使用模板引用变量
+### 通过子组件provider提供的类
 
-您可以使用模板引用变量代替组件类型。
+比如我们有一个子组件。代码如下
+```javascript
+import {Component, OnInit} from '@angular/core';
+import {ChildService} from './child.service';
+@Component({
+  selector: 'app-child',
+  template: `
+    <h1>自定义的一个子组件</h1>`,
+  providers: [
+    ChildService
+  ]
+})
+export class ChildComponent implements OnInit {
+  constructor(public childService: ChildService) {
+  }
+  ngOnInit() {
+  }
+}
 
+```
+ 在上面的子组件里面provider里面提供了一个ChildService类。我们也是可以通过@ViewChild来拿到这个ChildService类的。代码如下
+```ts
+@ViewChild(ChildService) childService: ChildService;
+```
+
+### 子组件provider通过string token提供的类
+子组件的pprovider通过 string token valued的形式提供了一个StringTokenValue类，string token 对应的是tokenService。
+
+```javascript
+import {Component} from '@angular/core';
+import {StringTokenValue} from './string-token-value';
+@Component({
+  selector: 'app-child',
+  template: `
+    <h1>自定义的一个子组件</h1>`,
+  styleUrls: ['./child.component.less'],
+  providers: [
+    {provide: 'tokenService', useClass: StringTokenValue}
+  ]
+})
+export class ChildComponent {
+}
+```
+在父组件里面我们也是可以拿到子组件provider的这个StringTokenValue类的。方式如下：
+
+  ```ts
+@ViewChild('tokenService') tokenService: StringTokenValue;
+
+```
+
+
+### 从子组件注入提供程序
+
+您还可以注入子组件中提供的服务。
+
+~~~ts
+import { ViewChild, Component } from '@angular/core';
+ 
+@Component({
+  selector: 'app-child',
+  template: `<h1>Child With Provider</h1>`,
+  providers: [{ provide: 'Token', useValue: 'Value' }]
+})
+ 
+export class ChildComponent{
+}
+~~~
+在父组件中，可以使用read属性访问提供程序
+
+~~~ts
+import { ViewChild, Component } from '@angular/core';
+ 
+@Component({
+  selector: 'app-root',
+  template: `<app-child></app-child>`,
+})
+ 
+export class AppComponent{
+    @ViewChild(ChildComponent , { read:'Token', static:false } ) childToken: string;
+}
+~~~
+
+
+
+### 通过模板变量
+
+例如：
 ~~~html
 <child-component #child></child-component>
 ~~~
+里面的child就是模板变量。
 
-然后在ViewChild查询中使用它来获取对该组件的引用。
+在ViewChild查询中使用它来获取对该组件的引用。
 
 ~~~ts
  @ViewChild("child", { static: true }) child: ChildComponent;
 ~~~
-
-## 使用ElementRef注入HTML元素
-
-Viewchild 同样可以用来查询 HTML元素。
-首先可以给HTML元素指定模板变量，然后就可以在viewChild中使用此模板变量查询HTML元素。查询结果将返回一个ElementRef类型的元素，它是本地HTML元素的包装器。
 
 ~~~ts
 import {AfterViewInit, Component, ElementRef, ViewChild} from '@angular/core';
@@ -113,12 +194,12 @@ import {AfterViewInit, Component, ElementRef, ViewChild} from '@angular/core';
 @Component({
     selector: 'htmlelement',
     template: `
-      <p #para>Some text</p>
+      <p #child>Some text</p>
     `,
 })
 export class HTMLElementComponent implements AfterViewInit {
  
-    @ViewChild('para',{static:false}) para: ElementRef;
+    @ViewChild('child',{static:false}) para: ElementRef;
  
     ngAfterViewInit() {
       console.log(this.para.nativeElement.innerHTML);
@@ -127,18 +208,14 @@ export class HTMLElementComponent implements AfterViewInit {
 }
 ~~~
 
-## 多个实例
-模板中可能存在同一组件或元素的多个实例。
+### 通过 TemplateRef 
+ 当选择器是TemplateRef的时候，则会获取到html里面所有的ng-template的节点。实际例子如下：
+```javascript
+  /**** @ViewChild(TemplateRef) @ViewChildren(TemplateRef)获取页面上的ng-template节点信息 ****/
+  @ViewChild(TemplateRef) template: TemplateRef<any>;
+  @ViewChildren(TemplateRef) templateList: QueryList<TemplateRef<any>>;
 
-~~~html
-<child-component></child-component>
-<child-component></child-component>
-~~~
-ViewChild 总是返回第一个匹配的组件。
-~~~ts
-@ViewChild(ChildComponent, {static:true}) child: ChildComponent;
-~~~
-要获取子组件的所有实例，我们可以使用ViewChildren，我们将在本教程后面介绍它。
+```
 
 ## ViewChild 返回 Undefined
 
@@ -174,6 +251,8 @@ ngAfterViewInit() {
 
 上面的代码也将与ngOnInit生命周期挂钩一起使用。但它不能保证一直工作，因为Angular可能不会在引发ngOnInit钩子之前初始化视图的所有部分。因此，最好使用ngAfterViewInit钩子。
 
+
+
 此外，ViewChild更新值的时间也取决于静态选项
 
 ## 在ViewChild中使用Static选项
@@ -182,11 +261,10 @@ ngAfterViewInit() {
 
 static选项确定ViewChild查询解析的时间。
 
-+ static:true 将在每次变更改检测之前解析ViewChild。
++ static:true 将在每次变更改检测之前解析ViewChild(对象静态生成时)。
 
-+ static:false 将在每次变更改检测之后解析ViewChild。
++ static:false 将在每次变更改检测之后解析ViewChild(对象动态渲染时)。
 
-当动态渲染子对象时，static的值变得很重要。例如在ngIf或ngSwitch等内部。
 
 例如，考虑下面的代码，我们子组件放在ngIf中
 
@@ -234,7 +312,6 @@ export class AppComponent {
   decrement() {
     this.child.decrement();
   }
- 
 }
 ~~~
 
@@ -269,34 +346,162 @@ export class AppComponent {
 Angular中的每个元素总是有一个ElementRef和ViewContainerRef与之关联。如果该元素是一个组件或指令，那么总是有组件或指令实例。您也可以对一个元素应用多个指令。
 不带read令牌的ViewChild默认返回值类型为组件，如果返回值不是组件类型则返回elementRef类型。
 
-## 从子组件注入提供程序
 
-您还可以注入子组件中提供的服务。
+## 多个实例
+模板中可能存在同一组件或元素的多个实例。
 
+~~~html
+<child-component></child-component>
+<child-component></child-component>
+~~~
+ViewChild 总是返回第一个匹配的组件。
 ~~~ts
-import { ViewChild, Component } from '@angular/core';
+@ViewChild(ChildComponent, {static:true}) child: ChildComponent;
+~~~
+要获取子组件的所有实例，我们可以使用ViewChildren，我们将在本教程后面介绍它。
+
+# ViewChildren
+
+ViewChildren装饰器用于从View中获取元素引用的列表。ViewChildren与ViewChild不同。ViewChild始终返回对单个元素的引用。如果存在多个元素，则ViewChild返回第一个匹配元素，ViewChildren总是以QueryList的形式返回所有元素。您可以遍历列表并访问每个元素。
+
+## 语法
+viewChildren的语法如下所示。除了static选项之外，它与viewChild的语法非常相似。
+
+```ts
+ViewChildren(selector: string | Function | Type<any>, opts: { read?: any; }): any
+```
+> ViewChildren总是在运行更改检测之后解析。即为什么它没有静态选项。而且，您不能在ngOnInit钩子中引用它，因为它还没有初始化。
+
+## QueryList
+
+QueryList将viewChildren或contentChildren返回的项存储在列表中。
+只要应用程序的状态发生变化，Angular就会更新此列表。它在每次检测到变化时都会这样做。
+QueryList还实现了一个可迭代的接口。这意味着您可以使用for（var i of items）对其进行迭代，也可以在template*ngFor=“let i of item”中与ngFor一起使用。
+可以通过订阅可观察的更改来观察更改。
+
+您可以使用以下方法和属性。
++ first：返回列表中的第一个项目。
++ last：获取列表中的最后一项。
++ length：获取项目的长度。
++ changes：是可观察的。每当Angular添加、删除或移动子元素时，它都会发出一个新值。
+
+## 实例
+在下面的示例中，输入元素使用ngModel指令，我们使用ViewChildren来获取所有输入元素并存储在QueryList中。
+
+最后，我们可以使用this.modelRefList.forEach循环查询列表并访问每个元素。
+```javascript
+
+import { ViewChild, Component, ViewChildren, QueryList, AfterViewInit } from '@angular/core';
+import { NgModel } from '@angular/forms';
  
 @Component({
-  selector: 'app-child',
-  template: `<h1>Child With Provider</h1>`,
-  providers: [{ provide: 'Token', useValue: 'Value' }]
+  selector: 'app-viewchildren2',
+  template: `
+      <h1>ViewChildren Example</h1>
+ 
+      <input *ngIf="showFirstName" name="firstName" [(ngModel)]="firstName">
+      <input *ngIf="showMiddleName" name="midlleName" [(ngModel)]="middleName">
+      <input *ngIf="showlastName" name="lastName" [(ngModel)]="lastName">
+ 
+ 
+      <input type="checkbox" id="showFirstName" name="showFirstName" [(ngModel)]="showFirstName">
+      <input type="checkbox" id="showMiddleName" name="showMiddleName" [(ngModel)]="showMiddleName">
+      <input type="checkbox" id="showlastName" name="showlastName" [(ngModel)]="showlastName">
+ 
+      <button (click)="show()">Show</button>`,
 })
  
-export class ChildComponent{
-}
-~~~
-在父组件中，可以使用read属性访问提供程序
-
-~~~ts
-import { ViewChild, Component } from '@angular/core';
+export class ViewChildrenExample2Component implements AfterViewInit {
  
+  firstName;
+  middleName;
+  lastName;
+ 
+  showFirstName=true;
+  showMiddleName=true;
+  showlastName=true;
+ 
+  @ViewChildren(NgModel) modelRefList: QueryList<NgModel>;
+ 
+  ngAfterViewInit() {
+ 
+    this,this.modelRefList.changes
+      .subscribe(data => {
+        console.log(data)
+      }
+    )
+  }
+  
+ 
+  show() {
+    this.modelRefList.forEach(element => {
+      console.log(element)
+      //console.log(element.value)
+    });
+ 
+  }
+}
+```
+
+# 指令
+       @ViewChild、@ViewChildren也是可以获取到指令对象的。指令对象的获取和组件对象的获取差不多，唯一不同的地方就是用模板变量名获取指令的时候要做一些特殊的处理。我们还是用具体的实例来说明。我们自定义一个非常简单的指令TestDirective，添加exportAs属性。代码如下。
+
+`exportAs属性很关键`
+```javascript
+
+import {Directive, ElementRef} from '@angular/core';
+
+/**
+ * 指令，测试使用,这里使用了exportAs，就是为了方便我们精确的找到指令
+ */
+@Directive({
+  selector: '[appTestDirective]',
+  exportAs: 'appTest'
+})
+export class TestDirective {
+
+  constructor(private elementRef: ElementRef) {
+    elementRef.nativeElement.value = '我添加了指令';
+  }
+
+}
+
+```
+
+获取TestDirective指令，注意单个指令对象获取的时候，模板变量名的写法。比如下面的代码中#divTestDirective='appTest'，模板变量名等号右边的就是TestDirective指令exportAs对应的名字。
+
+import {AfterViewInit, Component, QueryList, ViewChild, ViewChildren} from '@angular/core';
+import {TestDirective} from './test.directive';
+
+```javascript
 @Component({
   selector: 'app-root',
-  template: `<app-child></app-child>`,
+  template: `
+    <!-- view child for Directive -->
+    <input appTestDirective/>
+    <br/>
+    <input appTestDirective #divTestDirective='appTest'/>
+  `,
+  styleUrls: ['./app.component.less']
 })
- 
-export class AppComponent{
-    @ViewChild(ChildComponent , { read:'Token', static:false } ) childToken: string;
-}
-~~~
+export class AppComponent implements AfterViewInit {
+  /**
+   * 获取html里面所有的TestDirective
+   */
+  @ViewChildren(TestDirective) testDirectiveList: QueryList<TestDirective>;
+  /**
+   * 获取模板变量名为divTestDirective的TestDirective的指令,这个得配合指令的exportAs使用
+   */
+  @ViewChild('divTestDirective') testDirective: TestDirective;
 
+  ngAfterViewInit(): void {
+    console.log(this.testDirective);
+    if (this.testDirectiveList != null && this.testDirectiveList.length !== 0) {
+      this.testDirectiveList.forEach(elementRef => console.log(elementRef));
+    }
+  }
+}
+
+```
+
+ 总结：@ViewChild、@ViewChildren获取子元素的的时候，我们用的最多的应该就是通过模板变量名，或者直接通过class来获取了。还有一个特别要注意的地方就是获取单个指令对象的时候需要配合指令的exportAs属性使用，并且把他赋值给模板变量名。

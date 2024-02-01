@@ -1,7 +1,6 @@
 ---
 title: Angular Observable 简介
 date: 2023-04-14 11:51:36
-tags:rxjs
 ---
 
 # 什么是RxJS
