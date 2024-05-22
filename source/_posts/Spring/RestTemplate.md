@@ -701,7 +701,6 @@ public void test18() {
 ```
 创建 RestTemplate
 ```java
-
 new RestTemplate(new OkHttp3ClientHttpRequestFactory());
 ```
 
