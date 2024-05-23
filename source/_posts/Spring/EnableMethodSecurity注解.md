@@ -1,5 +1,5 @@
 ---
-title: @EnableMethodSecurity注解
+title: EnableMethodSecurity注解
 date: 2024-05-07 18:06:09
 tags:
 ---
