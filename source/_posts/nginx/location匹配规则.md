@@ -274,6 +274,7 @@ do stuff for two
 [root@VM_156_200_centos ~]#  curl http://127.0.0.1/?service=three
 do stuff for three
 ```
+
 # location uri匹配规则
 根据前面的符号，这里可以填写精确到 path 路径，也可以填正则表达式，Nginx 用的是 PCRE正则表达式语法，下表是在PCRE中元字符及其在正则表达式上下文中的行为的一个完整列表：
 |字符|描述|
@@ -429,46 +430,202 @@ location ~* ^.+\.(jpg|jpeg|gif|png|swf|rar|zip|css|js)$ {
 |$server_port|请求到达服务器的端口号,如：80|
 
 # 路由转发
-location 方法体内其实就是路由转发，而且 location 还允许嵌套，所以这部分要讲清楚，本文肯定是讲不完的。所以只是简单介绍一下其中的几种:
+# Rewrite语法规则
 
-1. 返回状态码和值
-这个也是最常见的，就是返回 http 的状态码，不管是 200， 还是 301 或者 403。 都是这一种
-```python
-location ~ /A.html {
-  return 301 https://$server_name/B.html;
-}
-```
-2. 反向代理
-主要通过 proxy_pass 来实现，可以转发到内部服务，也可以转发到外部服务，记得同时要转发真实 ip
+rewrite功能就是，使用nginx提供的全局变量或自己设置的变量，结合正则表达式和标志位实现url重写以及重定向。rewrite只能放在server{},location{},if{}中，并且只能对域名后边的除去传递的参数外的字符串起作用，例如http://seanlook.com/a/we/index.php?id=1&u=str 只对/a/we/index.php重写。
 
-```python
+如果想修改域名或参数字符串，可以使用全局变量匹配，也可以使用proxy_pass反向代理。
+
+rewrite和location功能有点像，都能实现跳转，主要区别在于rewrite是在同一域名内更改获取资源的路径，而location是对一类路径做控制访问或反向代理，可以proxy_pass到其他机器。
+
+rewrite语法：`rewrite 正则表达式 要替换的内容 [flag];`
+
+其中flag有如下几个值：
+
+1. last – 本条规则匹配完成后，立即发起新一轮的location 匹配规则
+2. break – 本条规则匹配完成即终止，不再匹配后面的任何规则
+3. redirect – 返回302临时重定向，浏览器地址会显示跳转新的URL地址
+4. permanent – 返回301永久重定向。浏览器地址会显示跳转新的URL地址
+
+```shell
+# rewrite 后面没有任何 flag 时就顺序执行 
+# 当 location 中没有 rewrite 模块指令可被执行时 就重写发起新一轮location匹配
 location / {
-  proxy_set_header  X-Real-IP       $remote_addr;
-  proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
-  proxy_pass https://foo.com;
-}
-```
-3. Rewrite 命令
-rewrite 功能就是，使用 nginx 提供的全局变量或自己设置的变量，结合正则表达式和标志位实现 url 重写以及重定向。
-
-rewrite 只能放在server{},location{},if{}中，并且只能对域名后边的除去传递的参数外的字符串起作用
-
-```python
-location ~ \.cgi$ {
-  rewrite ^(.*)\.cgi$ $1.html last;
-  return 301;
+    # 顺序执行如下两条rewrite指令 
+    rewrite ^/test1 /test2;
+    rewrite ^/test2 /test3;  # 此处发起新一轮location匹配 uri为/test3
 }
 
-location ~ \.html$ {
-  return 200 '1';
+location = /test2 {
+    return 200 "/test2";
+}  
+
+location = /test3 {
+    return 200 "/test3";
+}
+# 发送如下请求
+# curl 127.0.0.1:8080/test1
+# /test3
+```
+**很多情况下rewrite也会写在location里，它们的执行顺序是：**
+
+1. 顺序执行server块中的rewrite模块指令，得到rewrite后的请求URI
+2. 执行location匹配 
+3. 执行选定的location中的rewrite指令 
+4. 如果其中某步URI被重写，则重新循环执行1-3，直到找到真实存在的文件；
+5. 循环超过10次，则返回500 Internal Server Error错误。
+
+## last 和 break的区别
+
+1. last 和 break一样 它们都会终止此 location 中其他它rewrite模块指令的执行
+2. 但是 last 立即发起新一轮的 location 匹配 而 break 则不会
+
+```shell
+location / {
+    rewrite ^/test1 /test2;
+    rewrite ^/test2 /test3 last;  # 此处发起新一轮location匹配 uri为/test3
+    rewrite ^/test3 /test4;
+    proxy_pass http://www.baidu.com;
+}
+
+location = /test2 {
+    return 200 "/test2";
+}  
+
+location = /test3 {
+    return 200 "/test3";
+}
+location = /test4 {
+    return 200 "/test4";
+}
+# 发送如下请求
+# curl 127.0.0.1:8080/test1
+# /test3 
+
+当如果将上面的 location / 改成如下代码
+location / {
+    rewrite ^/test1 /test2;
+    # 此处 不会 发起新一轮location匹配；会终止执行后续rewrite 重写后的uri为 /more/index.html
+    rewrite ^/test2 /more/index.html break;  
+    rewrite /more/index\.html /test4; # 这条指令会被忽略
+
+    # 因为 proxy_pass 不是rewrite模块的指令 所以它不会被 break终止
+    proxy_pass https://www.baidu.com;
+}
+# 发送如下请求
+# 浏览器输入 127.0.0.1:8080/test1 
+# 代理到 百度产品大全页面 https://www.baidu.com/more/index.html;
+```
+
+## redirect 和 permanent
+
+1. 临时重定向：对旧网址没有影响，但新网址不会有排名
+2. 永久重定向：新网址完全继承旧网址，旧网址的排名等完全清零
+
+
+修改nginx.conf文件：
+```shell
+server {
+      listen 80 default;
+      charset utf-8;
+      server_name www.hzznb-xzll.xyz hzznb-xzll.xyz;
+
+      # 临时（redirect）重定向配置 当访问 hzznb-xzll.xyz/temp_redir/ 这个请求会临时（302）重定向到百度页面
+      location /temp_redir {
+          rewrite ^/(.*) https://www.baidu.com redirect;
+      }
+      # 永久重定向（permanent）配置 当访问 hzznb-xzll.xyz/forever_red… 这个请求会永久（301）重定向到百度页面
+      location /forever_redir {
+
+          rewrite ^/(.*) https://www.baidu.com permanent;
+      }
+
+      # rewrite last配置 可以看到我们定义 访问 hzznb-xzll.xyz/1/ 的请求被替换为 hzznb-xzll.xyz/2/ 之后再被替换为 hzznb-xzll.xyz/3/  最后找到/usr/local/nginx/test/static/location_last_test.html 这个文件并返回。
+      location /1 {
+        rewrite /1/(.*) /2/$1 last;
+      }
+      location /2 {
+        rewrite /2/(.*) /3/$1 last;
+      }
+      location /3 {
+        alias  '/usr/local/nginx/test/static/';
+        index location_last_test.html;
+      }
+    }
+
+```
+
+## rewrite 后的请求参数
+如果替换字符串replacement包含新的请求参数，则在它们之后附加先前的请求参数。如果你不想要之前的参数，则在替换字符串 replacement 的末尾放置一个问号，避免附加它们。
+```shell
+# 由于最后加了个 ?，原来的请求参数将不会被追加到rewrite之后的url后面 
+rewrite ^/users/(.*)$ /show?user=$1? last;
+```
+
+## rewrite_log
+开启或者关闭 rewrite模块指令执行的日志，如果开启，则重写将记录下notice 等级的日志到nginx 的 error_log 中，默认为关闭 off
+
+`Syntax: rewrite_log on | off;`
+
+## return
+
+格式：
+```shell
+return code [text];
+return code URL;
+return URL;
+```
+停止处理并将指定的code码返回给客户端。 非标准code码 444 关闭连接而不发送响应报头。
+
+从0.8.42版本开始， return 语句可以指定重定向 url (状态码可以为如下几种 301,302,303,307),也可以为其他状态码指定响应的文本内容，并且重定向的url和响应的文本可以包含变量。
+
+有一种特殊情况，就是重定向的url可以指定为此服务器本地的uri，这样的话，nginx会依据请求的协议$scheme， server_name_in_redirect 和 port_in_redirect自动生成完整的 url 
+
+**此处要说明的是server_name_in_redirect和port_in_redirect 指令是表示是否将server块中的 server_name 和 listen 的端口 作为redirect用 ）**
+
+```shell
+# return code [text]; 返回 ok 给客户端
+location = /ok {
+    return 200 "ok";
+}
+
+# return code URL; 临时重定向到 百度
+location = /redirect {
+    return 302 http://www.baidu.com;
+}
+
+# return URL; 和上面一样 默认也是临时重定向
+location = /redirect {
+    return http://www.baidu.com;
 }
 ```
 
-将所有 .cgi 结尾的都重定向到 .html 结尾的, 执行一下
+## break
+停止执行 ngx_http_rewrite_module 的指令集，但是其他模块指令是不受影响的
 
-```python
-[root@VM_156_200_centos ~]#  curl http://127.0.0.1/api.cgi
-1
+```shell
+server {
+    listen 8080;
+    # 此处 break 会停止执行 server 块的 return 指令(return 指令属于rewrite模块)
+    # 如果把它注释掉 则所有请求进来都返回 ok
+    break;
+    return 200 "ok";
+    location = /testbreak {
+        break;
+        return 200 $request_uri;
+        proxy_pass http://127.0.0.1:8080/other;
+    }
+    location / {
+        return 200 $request_uri;
+    }
+}
+
+# 发送请求如下
+# curl 127.0.0.1:8080/testbreak
+# /other
+
+# 可以看到 返回 `/other` 而不是 `/testbreak`，说明 `proxy_pass` 指令还是被执行了
+# 也就是说 其他模块的指令是不会被 break 中断执行的
+# (proxy_pass是ngx_http_proxy_module的指令)
+
 ```
-其实路由转发在 nginx 中还有非常多的用法，这边就不细讲了。毕竟这一部分也不是本文的重点。
-

@@ -192,6 +192,7 @@ http {
 另外值的注意的是： 因为有些指令是可以在不同作用域使用的，如果在多个作用域都有相同指令的使用，那么nginx将会遵循就近原则或者我愿称之为 内层配置优先。 eg: 你在 http配了日志级别，也在某个server中配了日志级别，那么这个server将使用他自己配置的已不使用外层的http日志配置。
 
 
+
 # 反向代理
 ![图 2](../906719353d4c09aff2cc5893b4f7268ea6c9212e6b2abe5e8029ad1c30606f5d.png)  
 
@@ -545,75 +546,100 @@ limit_conn_zone $binary_remote_addr zone=myConnLimit:10m; 代表的意思 是 �
 
 
 
-# Rewrite语法规则
-rewrite指令是通过正则表达式来改变URI。可以同时存在一个或多个指令。需要按照顺序依次对URL进行匹配和处理，常用于重定向功能。
 
-rewrite语法：`rewrite 正则表达式 要替换的内容 [flag];`
-
-其中flag有如下几个值：
-
-1. last – 本条规则匹配完成后，继续向下匹配新的location URI 规则
-2. break – 本条规则匹配完成即终止，不再匹配后面的任何规则
-3. redirect – 返回302临时重定向，浏览器地址会显示跳转新的URL地址
-4. permanent – 返回301永久重定向。浏览器地址会显示跳转新的URL地址
-
-## last和break的区别
-
-1. last一般写在server和if中，而break一般使用在location中
-2. last不终止重写后的url匹配，即新的url会再从server走一遍匹配流程，而break终止重写后的匹配
-3. break和last都能组织继续执行后面的rewrite指令
-
-## redirect 和 permanent
-
-1. 临时重定向：对旧网址没有影响，但新网址不会有排名
-2. 永久重定向：新网址完全继承旧网址，旧网址的排名等完全清零
-
-修改nginx.conf文件：
-```shell
-server {
-      listen 80 default;
-      charset utf-8;
-      server_name www.hzznb-xzll.xyz hzznb-xzll.xyz;
-
-      # 临时（redirect）重定向配置
-      location /temp_redir {
-          rewrite ^/(.*) https://www.baidu.com redirect;
-      }
-      # 永久重定向（permanent）配置
-      location /forever_redir {
-
-          rewrite ^/(.*) https://www.baidu.com permanent;
-      }
-
-      # rewrite last配置
-      location /1 {
-        rewrite /1/(.*) /2/$1 last;
-      }
-      location /2 {
-        rewrite /2/(.*) /3/$1 last;
-      }
-      location /3 {
-        alias  '/usr/local/nginx/test/static/';
-        index location_last_test.html;
-      }
-    }
-```
-+ last配置: 可以看到我们定义 访问 hzznb-xzll.xyz/1/ 的请求被替换为 hzznb-xzll.xyz/2/ 之后再被替换为 hzznb-xzll.xyz/3/  最后找到/usr/local/nginx/test/static/location_last_test.html 这个文件并返回。
-
-+ redirect配置： 当访问 hzznb-xzll.xyz/temp_redir/ 这个请求会临时（302）重定向到百度页面
-
-+ permanent配置： 当访问 hzznb-xzll.xyz/forever_red… 这个请求会永久（301）重定向到百度页面
 
 # if
-该指令用于条件判断，并且根据条件判断结果来选择不同的配置，其作用于为：server/location 块。这个指令比较简单，因为编程中if语句都是非常高频使用的。因为我们很多时候，都是在对 比如：url  参数 ip 域名等等做比对或者判断（一般都使用正则的方式）,而这些都在nginx全局变量中可以拿到，比如下边这个if判断就用到了全局变量：
+该指令用于条件判断，并且根据条件判断结果来选择不同的配置，其作用于为：server/location 块。这个指令比较简单，因为编程中if语句都是非常高频使用的。因为我们很多时候，都是在对 比如：url  参数 ip 域名等等做比对或者判断（一般都使用正则的方式）,而这些都在nginx全局变量中可以拿到。
 
- ```shell
- # 指定 username 参数中只要有字母 就不走nginx缓存
-     if ($arg_username ~ [a-z]) {
-         set $cache_name "no cache";
-     }
+**if判断指令语法为**
+```shell
+if(condition)
+{
+    ...
+}，
 ```
-## nginx全局变量
+对给定的条件condition进行判断。如果为真，大括号内的rewrite等指令将被执行，if条件(conditon)可以是如下任何内容：
+1. 一个变量名，如果变量 $variable 的值为空字符串或者字符串"0"，则为false
+2. 变量与一个字符串的比较 相等为(=) 不相等为(!=) 注意此处不要把相等当做赋值语句啊
+3. 变量与一个正则表达式的模式匹配 操作符可以是(`~ 区分大小写的正则匹配， ~*不区分大小写的正则匹配， !~ !~*，前面两者的非`)
+4. 检测文件是否存在 使用 -f(存在) 和 !-f(不存在)
+5. 检测路径是否存在 使用 -d(存在) 和 !-d(不存在) 后面判断可以是字符串也可是变量
+6. 检测文件、路径、或者链接文件是否存在 使用 -e(存在) 和 !-e(不存在) 后面判断可以是字符串也可是变量
+7. 检测文件是否为可执行文件 使用 -x(可执行) 和 !-x(不可执行) 后面判断可以是字符串也可是变量
+
+**注意 上面 第1，2，3条被判断的必须是 变量， 4, 5, 6, 7则可以是变量也可是字符串**
+
+## 例如
+```shell
+set $variable "0"; 
+if ($variable) {
+    # 不会执行，因为 "0" 为 false
+    break;            
+}
+
+# 使用变量与正则表达式匹配 没有问题
+if ( $http_host ~ "^star\.igrow\.cn$" ) {
+    break;            
+}
+
+# 字符串与正则表达式匹配 报错
+if ( "star" ~ "^star\.igrow\.cn$" ) {
+    break;            
+}
+# 检查文件类的 字符串与变量均可
+if ( !-f "/data.log" ) {
+    break;            
+}
+
+if ( !-f $filename ) {
+    break;            
+}
+
+ # 指定 username 参数中只要有字母 就不走nginx缓存
+if ($arg_username ~ [a-z]) {
+    set $cache_name "no cache";
+}
+
+#如果UA包含"MSIE"，rewrite请求到/msid/目录下
+if ($http_user_agent ~ MSIE) { 
+    rewrite ^(.)$ /msie/$1break;
+} 
+
+#如果cookie匹配正则，设置变量$id等于正则引用部分
+if ($http_cookie ~ "id=([^;]+)(?:;|$)") 
+{ 
+    set$id$1; 
+} 
+
+#如果提交方法为POST，则返回状态405（Method not allowed）。return不能返回301,302
+if ($request_method = POST) { 
+    return405; 
+} 
+
+#限速，$slow可以通过 set 指令设置
+if ($slow) { 
+    limit_rate 10k; 
+} 
+
+#如果请求的文件名不存在，则反向代理到localhost 。这里的break也是停止rewrite检查
+if (!-f $request_filename){ 
+    break; 
+    proxy_pass http://127.0.0.1; 
+} 
+
+#如果querystring中包含"post=140"，永久重定向到example.com
+if ($args ~ post=140){ 
+    rewrite ^ http://example.com/ permanent; 
+} 
+
+#防盗链 
+location ~* .(gif|jpg|png|swf|flv)$ { 
+    valid_referers none blocked www.jefflei.com www.leizhenfang.com; 
+    if ($invalid_referer) { 
+        return 404; 
+    } 
+}
+```
 
 # auto_index
 我们配置nginx， 使得访问 hzznb-xzll.xyz/book/ 时,返回 /usr/local/nginx/test/book/目录下的书籍，配置如下：
@@ -1010,5 +1036,11 @@ http {
 }
 ```
 
-参考 
+
+# 参考 
 https://juejin.cn/post/7306041273822527514#heading-67
+https://openresty.org/download/agentzh-nginx-tutorials-zhcn.html#00-Foreword02
+
+https://openresty.org/cn/
+
+https://juejin.cn/post/7166923395802595336?searchId=2024052312322984A6B385B1DDE00B11FC#heading-13
