@@ -6,15 +6,197 @@ tags:
 
 微服务中使用Spring Security + OAuth 2.0 + JWT 搭建认证授权服务
 
+
+
 OAuth 是一种用来规范令牌（Token）发放的授权机制，主要包含了四种授权模式：
 1. 授权码模式
 2. 简化模式
 3. 密码模式
 4. 客户端模式
 
-# 引入依赖
+# 客户端模式（Client Credentials）
+这是最简单的一种模式，我们可以直接向验证服务器请求一个Token（这里可能有些小伙伴对Token的概念不是很熟悉，Token相当于是一个令牌，我们需要在验证服务器**（User Account And Authentication）**服务拿到令牌之后，才能去访问资源，比如用户信息、借阅信息等，这样资源服务器才能知道我们是谁以及是否成功登录了）
+当然，这里的前端页面只是一个例子，它还可以是其他任何类型的客户端，比如App、小程序甚至是第三方应用的服务。
+![图 0](../b61bffdb1c0b1422e59512f1c92e0f1bc22e022a1901ed69dd166ed415c76230.png)  
 
+虽然这种模式比较简便，但是已经失去了用户验证的意义，压根就不是给用户校验准备的，而是更适用于服务内部调用的场景。
+
+# 密码模式（Resource Owner Password Credentials）
+密码模式相比客户端模式，就多了用户名和密码的信息，用户需要提供对应账号的用户名和密码，才能获取到Token。
+![图 1](../005775b0d9deff09cb2190fcb38d1ffbb9ae8e2d2d9c1b2ae0e35a8bed7be7c1.png)  
+
+虽然这样看起来比较合理，但是会直接将账号和密码泄露给客户端，需要后台完全信任客户端不会拿账号密码去干其他坏事，所以这也不是我们常见的。
+
+# 隐式授权模式（Implicit Grant）
+首先用户访问页面时，会重定向到认证服务器，接着认证服务器给用户一个认证页面，等待用户授权，用户填写信息完成授权后，认证服务器返回Token。
+![图 2](../87d53a374d9b1107f93e6224102d600fa559dd89849715ef4f25f5d3b02e9e2d.png)  
+
+它适用于没有服务端的第三方应用页面，并且相比前面一种形式，验证都是在验证服务器进行的，敏感信息不会轻易泄露，但是Token依然存在泄露的风险。
+
+# 授权码模式（Authrization Code）
+这种模式是最安全的一种模式，也是推荐使用的一种，比如我们手机上的很多App都是使用的这种模式。
+相比隐式授权模式，它并不会直接返回Token，而是返回授权码，真正的Token是通过应用服务器访问验证服务器获得的。在一开始的时候，应用服务器（客户端通过访问自己的应用服务器来进而访问其他服务）和验证服务器之间会共享一个secret，这个东西没有其他人知道，而验证服务器在用户验证完成之后，会返回一个授权码，应用服务器最后将授权码和secret一起交给验证服务器进行验证，并且Token也是在服务端之间传递，不会直接给到客户端。
+![图 3](../acc2bb2eab659990644c0feabc559523a2ddaf2068f36aef1a594eb15209108c.png)  
+
+这样就算有人中途窃取了授权码，也毫无意义，因为，Token的获取必须同时携带授权码和secret，但是secret第三方是无法得知的，并且Token不会直接丢给客户端，大大减少了泄露的风险。
+
+
+# 搭建验证服务器
+第一步就是最重要的，我们需要搭建一个验证服务器，它是我们进行权限校验的核心，验证服务器有很多的第三方实现也有Spring官方提供的实现，这里我们使用Spring官方提供的验证服务器。
+
+## 引入依赖
 spring-cloud-starter-oauth2 已经包含了 spring-cloud-starter-security、spring-security-oauth2、spring-security-jwt 这3个依赖，只需引入 spring-cloud-starter-oauth2 即可。
+
+## 修改一下配置文件
+```yml
+server:
+  port: 8500
+  servlet:
+  	#为了防止一会在服务之间跳转导致Cookie打架（因为所有服务地址都是localhost，都会存JSESSIONID）
+  	#这里修改一下context-path，这样保存的Cookie会使用指定的路径，就不会和其他服务打架了
+  	#但是注意之后的请求都得在最前面加上这个路径
+    context-path: /sso
+```
+## 编写配置类
+接着我们需要编写一下配置类，这里需要两个配置类，一个是OAuth2的配置类，还有一个是SpringSecurity的配置类：
+
+SecurityConfig 对象完整内容
+```java
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+ 
+    @Autowired
+    private UserDetailsService userDetailsService;
+ 
+    @Autowired
+    private InvalidAuthenticationEntryPoint invalidAuthenticationEntryPoint;
+ 
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+ 
+    @Bean
+    public JwtTokenOncePerRequestFilter authenticationJwtTokenFilter() {
+        return new JwtTokenOncePerRequestFilter();
+    }
+ 
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+                // 禁用basic明文验证
+                .httpBasic().disable()
+                // 前后端分离架构不需要csrf保护
+                .csrf().disable()
+                // 禁用默认登录页
+                .formLogin().disable()
+                // 禁用默认登出页
+                .logout().disable()
+                // 设置异常的EntryPoint，如果不设置，默认使用Http403ForbiddenEntryPoint
+                .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(invalidAuthenticationEntryPoint))
+                // 前后端分离是无状态的，不需要session了，直接禁用。
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(authorizeHttpRequests -> authorizeHttpRequests
+                        // 允许所有OPTIONS请求
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // 允许直接访问授权登录接口
+                        .requestMatchers(HttpMethod.POST, "/web/authenticate").permitAll()
+                        // 允许 SpringMVC 的默认错误地址匿名访问
+                        .requestMatchers("/error").permitAll()
+                        // 其他所有接口必须有Authority信息，Authority在登录成功后的UserDetailsImpl对象中默认设置“ROLE_USER”
+                        //.requestMatchers("/**").hasAnyAuthority("ROLE_USER")
+                        // 允许任意请求被已登录用户访问，不检查Authority
+                        .anyRequest().authenticated())
+                .authenticationProvider(authenticationProvider())
+                // 加我们自定义的过滤器，替代UsernamePasswordAuthenticationFilter
+                .addFilterBefore(authenticationJwtTokenFilter(), UsernamePasswordAuthenticationFilter.class);
+ 
+        return http.build();
+    }
+ 
+    @Bean
+    public UserDetailsService userDetailsService() {
+        // 调用 JwtUserDetailService实例执行实际校验
+        return username -> userDetailsService.loadUserByUsername(username);
+    }
+ 
+    /**
+     * 调用loadUserByUsername获得UserDetail信息，在AbstractUserDetailsAuthenticationProvider里执行用户状态检查
+     *
+     * @return
+     */
+    @Bean
+    public AuthenticationProvider authenticationProvider() {
+        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
+        // DaoAuthenticationProvider 从自定义的 userDetailsService.loadUserByUsername 方法获取UserDetails
+        authProvider.setUserDetailsService(userDetailsService());
+        // 设置密码编辑器
+        authProvider.setPasswordEncoder(passwordEncoder());
+        return authProvider;
+    }
+ 
+    /**
+     * 登录时需要调用AuthenticationManager.authenticate执行一次校验
+     *
+     * @param config
+     * @return
+     * @throws Exception
+     */
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
+    }
+}
+```
+OAuth2Configuration 对象完整内容
+
+```java
+@EnableAuthorizationServer   //开启验证服务器
+@Configuration
+public class OAuth2Configuration extends AuthorizationServerConfigurerAdapter {
+
+    @Resource
+    private AuthenticationManager manager;
+
+    private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+
+    /**
+     * 这个方法是对客户端进行配置，一个验证服务器可以预设很多个客户端，
+     * 之后这些指定的客户端就可以按照下面指定的方式进行验证
+     * @param clients 客户端配置工具
+     */
+    @Override
+    public void configure(ClientDetailsServiceConfigurer clients) throws Exception {
+        clients
+                .inMemory()   //这里我们直接硬编码创建，当然也可以像Security那样自定义或是使用JDBC从数据库读取
+                .withClient("web")   //客户端名称，随便起就行
+                .secret(encoder.encode("654321"))      //只与客户端分享的secret，随便写，但是注意要加密
+                .autoApprove(false)    //自动审批，这里关闭，要的就是一会体验那种感觉
+                .scopes("book", "user", "borrow")     //授权范围，这里我们使用全部all
+                .authorizedGrantTypes("client_credentials", "password", "implicit", "authorization_code", "refresh_token");
+                //授权模式，一共支持5种，除了之前我们介绍的四种之外，还有一个刷新Token的模式
+                //这里我们直接把五种都写上，方便一会实验，当然各位也可以单独只写一种一个一个进行测试
+                //现在我们指定的客户端就支持这五种类型的授权方式了
+    }
+
+    @Override
+    public void configure(AuthorizationServerSecurityConfigurer security) {
+        security
+                .passwordEncoder(encoder)    //编码器设定为BCryptPasswordEncoder
+                .allowFormAuthenticationForClients()  //允许客户端使用表单验证，一会我们POST请求中会携带表单信息
+                .checkTokenAccess("permitAll()");     //允许所有的Token查询请求
+    }
+
+    @Override
+    public void configure(AuthorizationServerEndpointsConfigurer endpoints) {
+        endpoints
+                .authenticationManager(manager);
+        //由于SpringSecurity新版本的一些底层改动，这里需要配置一下authenticationManager，才能正常使用password模式
+    }
+}
+```
+
 
 # 准备工作
 

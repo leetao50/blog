@@ -105,7 +105,7 @@ public class MyService{
     @Autowired
     private MyDependency autowiredDependency;
 
-    privatefinal MyDependency finalDependency;
+    private final MyDependency finalDependency;
 
     publicMyService(MyDependency finalDependency){
         this.finalDependency = finalDependency;
